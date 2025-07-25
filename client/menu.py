@@ -71,6 +71,11 @@ class LobbyScreen:
         title_surf = MEDIUM_FONT.render("Lobby", True, BLUE)
         SCREEN.blit(title_surf, (20, 20))
         
+        # Draw server info
+        server_info = self.network.get_server_info()
+        server_surf = SMALL_FONT.render(server_info, True, BLACK)
+        SCREEN.blit(server_surf, (20, 50))
+        
         # Draw players list
         players_surf = SMALL_FONT.render("Players:", True, BLACK)
         SCREEN.blit(players_surf, (WIDTH - 150, 20))
@@ -83,7 +88,7 @@ class LobbyScreen:
             # Draw chat messages
             for i, message in enumerate(self.network.messages[-10:]):
                 msg_surf = SMALL_FONT.render(message, True, BLACK)
-                SCREEN.blit(msg_surf, (20, 60 + i * 20))
+                SCREEN.blit(msg_surf, (20, 80 + i * 20))
         
         # Draw input box and exit button
         self.input_box.draw(SCREEN)

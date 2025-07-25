@@ -7,6 +7,7 @@ class NetworkManager:
         self.port = port
         self.is_host = is_host
         self.server_ip = server_ip
+        self.host_ip = None  # Store the host IP when hosting
         self.players = [username]
         self.messages = []
         self.running = True
@@ -18,6 +19,7 @@ class NetworkManager:
         self.player_update_handler = None
         
         if is_host:
+            self.host_ip = get_local_ip()
             self.start_server()
         else:
             self.connect_to_server()
@@ -39,6 +41,14 @@ class NetworkManager:
         except Exception as e:
             self.add_message(f"Failed to start server: {str(e)}")
             self.running = False
+
+    def get_local_ip():
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(("8.8.8.8", 80))
+                return s.getsockname()[0]
+        except Exception:
+            return "127.0.0.1"
 
     def accept_connections(self):
         while self.running:
@@ -195,6 +205,12 @@ class NetworkManager:
                 self.messages.append(message)
             if self.message_handler and message.startswith("MSG:"):
                 self.message_handler(message)
+
+    def get_server_info(self):
+        if self.is_host:
+            return f"Host IP: {self.host_ip}:{self.port}"
+        else:
+            return f"Connected to: {self.server_ip}:{self.port}"
 
     def quit(self):
         self.running = False
