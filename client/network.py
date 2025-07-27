@@ -7,7 +7,7 @@ class NetworkManager:
         self.port = port
         self.is_host = is_host
         self.server_ip = server_ip
-        self.host_ip = None  # Store the host IP when hosting
+        self.host_ip = None
         self.players = [username]
         self.messages = []
         self.running = True
@@ -19,7 +19,7 @@ class NetworkManager:
         self.player_update_handler = None
         
         if is_host:
-            self.host_ip = get_local_ip()
+            self.host_ip = self.get_local_ip()
             self.start_server()
         else:
             self.connect_to_server()
@@ -42,7 +42,7 @@ class NetworkManager:
             self.add_message(f"Failed to start server: {str(e)}")
             self.running = False
 
-    def get_local_ip():
+    def get_local_ip(self):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                 s.connect(("8.8.8.8", 80))
@@ -102,6 +102,17 @@ class NetworkManager:
                     self.broadcast(f"PLAYERS:{','.join(self.players)}")
                     self.add_message(f"{username} left the lobby")
                     break
+        except OSError as sock_err:
+            # socket-level errors (e.g. Bad file descriptor)
+            print(f"[Socket Error] {sock_err!r}")
+            try:
+                client_socket.close()
+            except Exception as e:
+                print(f"[Cleanup Error] Closing socket: {e}")
+            with self.lock:
+                if client_socket in self.clients:
+                    self.clients.remove(client_socket)
+            return
         except Exception as e:
             print(f"Error handling client: {e}")
         finally:
