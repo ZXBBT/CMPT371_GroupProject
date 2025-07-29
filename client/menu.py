@@ -46,18 +46,20 @@ class LobbyScreen:
                 player = parts[3]
                 self.player_ready[player] = is_ready
 
+                if is_ready:
+                    self.network.messages.append(f"{player} is ready.")
+                else:
+                    self.network.messages.append(f"{player} is not ready.")
+
                 with self.network.lock:
                     for p in self.network.players:
                         if p not in self.player_ready:
                             self.player_ready[p] = False
-                    all_ready = len(self.network.players) > 0 and all(self.player_ready.get(p, False) for p in self.network.players)
 
-                if all_ready:
-                    print("All players are ready — sending START command")
-                    self.network.send_game_command("START")
+                self.check_all_ready()
 
         elif message.strip() == "GAME:START":
-            print("🎮 GAME:START received — posting to main loop")
+            print("GAME:START received")
             pygame.event.post(pygame.event.Event(pygame.USEREVENT, {"start_game": True}))
 
     def handle_player_update(self, players):
@@ -67,6 +69,15 @@ class LobbyScreen:
         for p in players:
             if p not in self.player_ready:
                 self.player_ready[p] = False
+
+    def check_all_ready(self):
+        with self.network.lock:
+            valid_players = [p for p in self.network.players if self.player_ready.get(p) is not None]
+            all_ready = len(valid_players) > 0 and all(self.player_ready.get(p, False) for p in valid_players)
+        if all_ready:
+            print("All players are ready")
+            self.network.send_game_command("START")
+            self.handle_network_message("GAME:START")
 
     def run(self):
         clock = pygame.time.Clock()
@@ -84,7 +95,7 @@ class LobbyScreen:
                         self.input_box.text = ""
 
                 if event.type == pygame.USEREVENT and event.dict.get("start_game"):
-                    print("Launching GameBoard")
+                    print("Launching GameBoard...")
                     GameBoard(self.network).run()
                     pygame.quit()
                     sys.exit()
@@ -103,6 +114,7 @@ class LobbyScreen:
     def on_ready_toggle(self, player_id, is_ready):
         self.player_ready[player_id] = is_ready
         self.network.send_game_command(f"READY:{int(is_ready)}:{player_id}")
+        self.check_all_ready()
 
     def draw(self):
         SCREEN.fill(WHITE)
@@ -132,6 +144,7 @@ class LobbyScreen:
 
     def quit_lobby(self):
         self.network.quit()
+
 
 def create_game_screen():
     username_box = InputBox(WIDTH // 2 - 100, 150, 200, 40, "Username")
