@@ -10,9 +10,6 @@ SIDE_WIDTH = 180
 WIDTH = SIDE_WIDTH + GRID_SIZE * SQUARE_SIZE
 HEIGHT = GRID_SIZE * SQUARE_SIZE
 
-SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Deny and Conquer")
-
 FONT = pygame.font.SysFont("Arial", 18)
 PLAYER_COLORS = ["red", "blue", "green", "pink"]
 
@@ -34,6 +31,7 @@ class Square:
 class GameBoard:
     def __init__(self, network_manager):
         self.network = network_manager
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         self.squares = [[Square(r, c) for c in range(GRID_SIZE)] for r in range(GRID_SIZE)]
         self.clock = pygame.time.Clock()
         self.running = True
@@ -71,25 +69,25 @@ class GameBoard:
 
     def draw_players(self):
         y = 20
-        SCREEN.blit(FONT.render("Players:", True, (0, 0, 0)), (20, y))
+        self.screen.blit(FONT.render("Players:", True, (0, 0, 0)), (20, y))
         y += 30
         for name in self.network.players:
             color = self.player_colors.get(name, "black")
-            pygame.draw.rect(SCREEN, pygame.Color(color), (20, y, 20, 20))
-            SCREEN.blit(FONT.render(name, True, (0, 0, 0)), (50, y))
+            pygame.draw.rect(self.screen, pygame.Color(color), (20, y, 20, 20))
+            self.screen.blit(FONT.render(name, True, (0, 0, 0)), (50, y))
             y += 30
 
     def draw_board(self):
         for row in self.squares:
             for square in row:
-                square.draw(SCREEN)
+                square.draw(self.screen)
 
     def run(self):
         while self.running and self.network.running:
             self.assign_colors()  # continuously sync
             self.update_cursor()
             self.handle_events()
-            SCREEN.fill((255, 255, 255))
+            self.screen.fill((255, 255, 255))
             self.draw_players()
             self.draw_board()
             self.draw_cursor()
@@ -99,7 +97,7 @@ class GameBoard:
     def draw_cursor(self):
         if self.cursor_img:
             x, y = pygame.mouse.get_pos()
-            SCREEN.blit(self.cursor_img, (x - 20, y - 20))
+            self.screen.blit(self.cursor_img, (x - 20, y - 20))
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -118,6 +116,6 @@ class GameBoard:
                     self.network.send_game_command(f"CLAIM:{square.row},{square.col}:{self.my_color}")
 
 if __name__ == "__main__":
-    net = NetworkManager("TestPlayer", 25565, is_host=True)
+    net = NetworkManager("brandonyang", 25565, is_host=True)
     board = GameBoard(net)
     board.run()
