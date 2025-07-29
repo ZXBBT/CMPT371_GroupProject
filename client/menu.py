@@ -36,6 +36,8 @@ class LobbyScreen:
         self.player_ready = {self.network.username: False}
         self.ready_button = ReadyButton("Ready", 50, HEIGHT - 100, 120, 40, self.on_ready_toggle, self.network.username)
 
+        self.should_start_game = False  # NEW FLAG
+
         # Set up network callbacks
         self.network.set_message_handler(self.handle_network_message)
         self.network.set_player_update_handler(self.handle_player_update)
@@ -52,12 +54,12 @@ class LobbyScreen:
                     with self.network.lock:
                         all_ready = all(self.player_ready.get(p, False) for p in self.network.players)
                     if all_ready:
-                        print("All players are ready! Game start")
+                        print("All players are ready! Sending START...")
                         self.network.send_game_command("START")
 
         elif message.strip() == "GAME:START":
-            print("Received GAME:START — entering GameBoard")
-            GameBoard(self.network).run()
+            print("Received GAME:START — will launch GameBoard")
+            self.should_start_game = True
 
     def handle_player_update(self, players):
         pass  # Player list is automatically updated in network.players
@@ -65,7 +67,7 @@ class LobbyScreen:
     def run(self):
         clock = pygame.time.Clock()
 
-        while self.network.running:
+        while self.network.running and not self.should_start_game:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.quit_lobby()
@@ -88,6 +90,9 @@ class LobbyScreen:
             pygame.display.flip()
             clock.tick(60)
 
+        if self.should_start_game:
+            GameBoard(self.network).run()
+
     def on_ready_toggle(self, player_id, is_ready):
         self.player_ready[player_id] = is_ready
         self.network.send_game_command(f"READY:{int(is_ready)}:{player_id}")
@@ -96,9 +101,8 @@ class LobbyScreen:
             with self.network.lock:
                 all_ready = all(self.player_ready.get(p, False) for p in self.network.players)
             if all_ready:
-                print("All players are ready, Game start")
+                print("All players are ready! Sending START...")
                 self.network.send_game_command("START")
-                GameBoard(self.network).run()
 
     def draw(self):
         SCREEN.fill(WHITE)
