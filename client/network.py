@@ -95,7 +95,7 @@ class NetworkManager:
                     # Forward game-specific commands
                     if self.message_handler:
                         self.message_handler(data)
-                    self.broadcast(data, exclude_socket=client_socket)
+                    self.broadcast(data)
                 elif data.startswith("LEAVE:"):
                     username = data.split(":")[1]
                     with self.lock:

@@ -43,7 +43,6 @@ class LobbyScreen:
     def handle_network_message(self, message):
         if message.startswith("GAME:READY:"):
             parts = message.split(":")
-
             if len(parts) == 4:
                 is_ready = parts[2] == "1"
                 player = parts[3]
@@ -55,7 +54,10 @@ class LobbyScreen:
                     if all_ready:
                         print("All players are ready! Game start")
                         self.network.send_game_command("START")
-        # pass  # Messages are already added to network.messages
+
+        elif message.strip() == "GAME:START":
+            print("Received GAME:START — entering GameBoard")
+            GameBoard(self.network).run()
 
     def handle_player_update(self, players):
         pass  # Player list is automatically updated in network.players
