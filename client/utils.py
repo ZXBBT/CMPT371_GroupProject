@@ -31,6 +31,34 @@ class Button:
             return self.callback()
         return None
 
+class ReadyButton(Button):
+    def __init__(self, text, x, y, width, height, callback_toggle, player_id):
+        super().__init__(text, x, y, width, height, callback_toggle)
+        self.ready = False
+        self.player_id = player_id
+        self.callback_toggle = callback_toggle
+
+    def draw(self, surface):
+        color = (100, 255, 100) if self.ready else LIGHT_GRAY
+        if self.hovered:
+            color = (180, 220, 180) if self.ready else (180, 180, 180)
+
+        pygame.draw.rect(surface, color, self.rect, border_radius=8)
+        pygame.draw.rect(surface, DARK_GRAY, self.rect, 2, border_radius=8)
+
+        label = "Ready" if self.ready else "Not Ready"
+        text_surf = self.font.render(label, True, BLACK)
+        text_rect = text_surf.get_rect(center=self.rect.center)
+        surface.blit(text_surf, text_rect)
+
+    def handle_event(self, event):
+        self.hovered = self.rect.collidepoint(pygame.mouse.get_pos())
+        if event.type == pygame.MOUSEBUTTONDOWN and self.hovered:
+            self.ready = not self.ready
+            return self.callback_toggle(self.player_id, self.ready)
+        return None
+
+
 class InputBox:
     def __init__(self, x, y, width, height, placeholder="", default_text=""):
         self.rect = pygame.Rect(x, y, width, height)

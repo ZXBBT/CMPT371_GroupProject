@@ -1,16 +1,17 @@
 import pygame
 import sys
-from utils import Button, InputBox
+from utils import Button, InputBox, ReadyButton
 from network import NetworkManager
 
 pygame.init()
 pygame.font.init()
+
 WIDTH, HEIGHT = 600, 400
 SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Deny and Conquer")
 
-# Colors
 WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
 BLUE = (0, 120, 215)
 BLACK = (0, 0, 0)
 
@@ -29,12 +30,29 @@ class LobbyScreen:
         self.input_box = InputBox(50, HEIGHT - 50, WIDTH - 100, 40, "Type your message...")
         self.exit_button = Button("Exit Lobby", WIDTH - 120, HEIGHT - 50, 100, 40, self.quit_lobby)
         
+        self.player_ready = {self.network.username: False}
+        self.ready_button = ReadyButton("Ready", 50, HEIGHT - 100, 120, 40, self.on_ready_toggle, self.network.username)
+
         # Set up network callbacks
         self.network.set_message_handler(self.handle_network_message)
         self.network.set_player_update_handler(self.handle_player_update)
 
     def handle_network_message(self, message):
-        pass  # Messages are already added to network.messages
+        if message.startswith("GAME:READY:"):
+            parts = message.split(":")
+            
+            if len(parts) == 4:
+                is_ready = parts[2] == "1"
+                player = parts[3]
+                self.player_ready[player] = is_ready
+
+                if self.network.is_host:
+                    with self.network.lock:
+                        all_ready = all(self.player_ready.get(p, False) for p in self.network.players)
+                    if all_ready:
+                        print("All players are ready! Game start")
+                        self.network.send_game_command("START")
+        #pass  # Messages are already added to network.messages
 
     def handle_player_update(self, players):
         pass  # Player list is automatically updated in network.players
@@ -55,6 +73,7 @@ class LobbyScreen:
                         self.input_box.text = ""
                 
                 self.input_box.handle_event(event)
+                self.ready_button.handle_event(event)
                 action = self.exit_button.handle_event(event)
                 if action is not None:
                     self.quit_lobby()
@@ -64,6 +83,18 @@ class LobbyScreen:
             pygame.display.flip()
             clock.tick(60)
     
+    def on_ready_toggle(self, player_id, is_ready):
+        self.player_ready[player_id] = is_ready
+        self.network.send_game_command(f"READY:{int(is_ready)}:{player_id}")
+
+        if self.network.is_host:
+            with self.network.lock:
+                all_ready = all(self.player_ready.get(p, False) for p in self.network.players)
+            if all_ready:
+                print("All players are ready, Game start")
+                self.network.send_game_command("START")
+
+
     def draw(self):
         SCREEN.fill(WHITE)
         
@@ -93,6 +124,7 @@ class LobbyScreen:
         # Draw input box and exit button
         self.input_box.draw(SCREEN)
         self.exit_button.draw(SCREEN)
+        self.ready_button.draw(SCREEN)
     
     def quit_lobby(self):
         self.network.quit()
@@ -207,7 +239,7 @@ def main_menu():
                 button.handle_event(event)
         
         title_surf = TITLE_FONT.render("Deny and Conquer", True, BLUE)
-        title_rect = title_surf.get_rect(center=(WIDTH // 2, 80))
+        title_rect = title_surf.get_rect(center=(WIDTH // 2, 60))
         SCREEN.blit(title_surf, title_rect)
         
         for button in buttons:
