@@ -114,7 +114,9 @@ class LobbyScreen:
     def on_ready_toggle(self, player_id, is_ready):
         self.player_ready[player_id] = is_ready
         self.network.send_game_command(f"READY:{int(is_ready)}:{player_id}")
-        self.check_all_ready()
+
+        if self.network.is_host:
+            self.check_all_ready()
 
     def draw(self):
         SCREEN.fill(WHITE)

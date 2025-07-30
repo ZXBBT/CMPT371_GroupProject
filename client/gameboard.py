@@ -29,8 +29,9 @@ class Square:
         return self.rect.collidepoint(pos)
 
 class GameBoard:
-    def __init__(self, network_manager):
+    def __init__(self, network_manager):   
         self.network = network_manager
+        self.network.set_message_handler(self.handle_game_message)
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         self.squares = [[Square(r, c) for c in range(GRID_SIZE)] for r in range(GRID_SIZE)]
         self.clock = pygame.time.Clock()
@@ -111,9 +112,21 @@ class GameBoard:
     def handle_click(self, pos):
         for row in self.squares:
             for square in row:
-                if square.contains(pos) and square.claimed_by is None:
+                if square.contains(pos):
                     square.claimed_by = self.my_color
                     self.network.send_game_command(f"CLAIM:{square.row},{square.col}:{self.my_color}")
+
+    def handle_game_message(self, message):
+        if message.startswith("GAME:CLAIM:"):
+            try:
+                _, data = message.split("GAME:CLAIM:")
+                coord_str, color = data.split(":")
+                row, col = map(int, coord_str.split(","))
+                if 0 <= row < GRID_SIZE and 0 <= col < GRID_SIZE:
+                    self.squares[row][col].claimed_by = color
+            except Exception as e:
+                print(f"Invalid message: {message} ({e})")
+
 
 if __name__ == "__main__":
     net = NetworkManager("brandonyang", 25565, is_host=True)
