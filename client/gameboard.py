@@ -10,6 +10,8 @@ SIDE_WIDTH = 180
 WIDTH = SIDE_WIDTH + GRID_SIZE * SQUARE_SIZE
 HEIGHT = GRID_SIZE * SQUARE_SIZE
 
+ANIMATION_SPEED = 1
+
 FONT = pygame.font.SysFont("Arial", 18)
 PLAYER_COLORS = ["red", "blue", "green", "pink"]
 
@@ -20,9 +22,27 @@ class Square:
         self.rect = pygame.Rect(SIDE_WIDTH + col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE)
         self.claimed_by = None
 
+        # Animation and lock
+        self.animating = False
+        self.locked_by = None
+        self.animation_progress = 0
+
     def draw(self, screen):
-        color = (255, 255, 255) if not self.claimed_by else pygame.Color(self.claimed_by)
-        pygame.draw.rect(screen, color, self.rect)
+        if self.claimed_by:
+            if self.animating:
+                # Animation part
+                progress_height = int(SQUARE_SIZE * (self.animation_progress / 100))
+                partial_rect = pygame.Rect(
+                    self.rect.x,
+                    self.rect.y + (SQUARE_SIZE - progress_height),
+                    SQUARE_SIZE,
+                    progress_height
+                )
+                color = pygame.Color(self.claimed_by)
+                pygame.draw.rect(screen, color, partial_rect)
+            else:
+                pygame.draw.rect(screen, pygame.Color(self.claimed_by), self.rect)
+
         pygame.draw.rect(screen, (0, 0, 0), self.rect, 2)
 
     def contains(self, pos):
@@ -88,6 +108,7 @@ class GameBoard:
             self.assign_colors()  # continuously sync
             self.update_cursor()
             self.handle_events()
+            self.update_animations()
             self.screen.fill((255, 255, 255))
             self.draw_players()
             self.draw_board()
@@ -110,11 +131,21 @@ class GameBoard:
                 self.handle_click(pygame.mouse.get_pos())
 
     def handle_click(self, pos):
+        if any(sq.animating and sq.locked_by == self.my_color for row in self.squares for sq in row):
+            return
+
         for row in self.squares:
             for square in row:
                 if square.contains(pos):
+                    if square.animating or square.locked_by is not None or square.claimed_by == self.my_color:
+                        return
+
+                    square.locked_by = self.my_color
+                    square.animating = True
+                    square.animation_progress = 0
                     square.claimed_by = self.my_color
                     self.network.send_game_command(f"CLAIM:{square.row},{square.col}:{self.my_color}")
+                    return
 
     def handle_game_message(self, message):
         if message.startswith("GAME:CLAIM:"):
@@ -123,9 +154,25 @@ class GameBoard:
                 coord_str, color = data.split(":")
                 row, col = map(int, coord_str.split(","))
                 if 0 <= row < GRID_SIZE and 0 <= col < GRID_SIZE:
-                    self.squares[row][col].claimed_by = color
+                    square = self.squares[row][col]
+                    if square.animating or square.locked_by is not None:
+                        return
+                    square.claimed_by = color
+                    square.animating = True
+                    square.animation_progress = 0
+                    square.locked_by = None
             except Exception as e:
                 print(f"Invalid message: {message} ({e})")
+
+    def update_animations(self):
+        for row in self.squares:
+            for square in row:
+                if square.animating:
+                    square.animation_progress += ANIMATION_SPEED
+                    if square.animation_progress >= 100:
+                        square.animating = False
+                        square.animation_progress = 100
+                        square.locked_by = None
 
 
 if __name__ == "__main__":
