@@ -137,13 +137,9 @@ class GameBoard:
         for row in self.squares:
             for square in row:
                 if square.contains(pos):
-                    if square.animating or square.locked_by is not None or square.claimed_by == self.my_color:
+                    if square.animating or square.locked_by is not None or square.claimed_by is not None:
                         return
 
-                    square.locked_by = self.my_color
-                    square.animating = True
-                    square.animation_progress = 0
-                    square.claimed_by = self.my_color
                     self.network.send_game_command(f"CLAIM:{square.row},{square.col}:{self.my_color}")
                     return
 
@@ -153,14 +149,13 @@ class GameBoard:
                 _, data = message.split("GAME:CLAIM:")
                 coord_str, color = data.split(":")
                 row, col = map(int, coord_str.split(","))
-                if 0 <= row < GRID_SIZE and 0 <= col < GRID_SIZE:
-                    square = self.squares[row][col]
-                    if square.animating or square.locked_by is not None:
-                        return
-                    square.claimed_by = color
-                    square.animating = True
-                    square.animation_progress = 0
-                    square.locked_by = None
+                square = self.squares[row][col]
+                if square.claimed_by is not None:
+                    return
+                square.claimed_by = color
+                square.animating = True
+                square.animation_progress = 0
+                square.locked_by = None
             except Exception as e:
                 print(f"Invalid message: {message} ({e})")
 

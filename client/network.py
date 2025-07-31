@@ -21,6 +21,7 @@ class NetworkManager:
         if is_host:
             self.host_ip = self.get_local_ip()
             self.start_server()
+            self.board_state = [[None for _ in range(8)] for _ in range(8)]
         else:
             self.connect_to_server()
     
@@ -92,10 +93,26 @@ class NetworkManager:
                     message = data.split(":", 1)[1]
                     self.broadcast(f"MSG:{message}", exclude_socket=client_socket)
                 elif data.startswith("GAME:"):
-                    # Forward game-specific commands
-                    if self.message_handler:
-                        self.message_handler(data)
-                    self.broadcast(data)
+                    if data.startswith("GAME:CLAIM:") and self.is_host:
+                        try:
+                            _, claim_data = data.split("GAME:CLAIM:")
+                            coord_str, color = claim_data.split(":")
+                            row, col = map(int, coord_str.split(","))
+
+                            if self.board_state[row][col] is None:
+                                self.board_state[row][col] = color
+                                if self.message_handler:
+                                    self.message_handler(f"GAME:CLAIM:{row},{col}:{color}")
+                                self.broadcast(f"GAME:CLAIM:{row},{col}:{color}")
+                                print(f"CLAIM accepted from {color} at ({row},{col})")
+                            else:
+                                print(f"Rejected CLAIM for ({row},{col}) — already claimed.")
+                        except Exception as e:
+                            print(f"Malformed CLAIM: {data} ({e})")
+                    else:
+                        if self.message_handler:
+                            self.message_handler(data)
+                        self.broadcast(data)
                 elif data.startswith("LEAVE:"):
                     username = data.split(":")[1]
                     with self.lock:
@@ -206,6 +223,8 @@ class NetworkManager:
             
         try:
             if self.is_host:
+                if self.message_handler:
+                    self.message_handler(f"GAME:{command}")
                 self.broadcast(f"GAME:{command}")
             else:
                 self.client_socket.send(f"GAME:{command}".encode())
