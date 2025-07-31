@@ -11,8 +11,10 @@ WIDTH = SIDE_WIDTH + GRID_SIZE * SQUARE_SIZE
 HEIGHT = GRID_SIZE * SQUARE_SIZE
 
 ANIMATION_SPEED = 1
+WIN_REQUIRE = 30
 
 FONT = pygame.font.SysFont("Arial", 18)
+BIG_FONT = pygame.font.SysFont("Arial", 64)
 PLAYER_COLORS = ["red", "blue", "green", "pink"]
 
 class Square:
@@ -26,6 +28,7 @@ class Square:
         self.animating = False
         self.locked_by = None
         self.animation_progress = 0
+
 
     def draw(self, screen):
         if self.claimed_by:
@@ -62,6 +65,8 @@ class GameBoard:
         self.cursor_img = None
         self.my_color = None
 
+        self.winner = None
+
         self.assign_colors()
         self.load_pen_images()
         self.update_cursor()
@@ -92,10 +97,14 @@ class GameBoard:
         y = 20
         self.screen.blit(FONT.render("Players:", True, (0, 0, 0)), (20, y))
         y += 30
+        percentages = self.calculate_ownership()
         for name in self.network.players:
             color = self.player_colors.get(name, "black")
+            percent = percentages.get(name, 0)
+            label = f"{name} ({percent}%)"
+
             pygame.draw.rect(self.screen, pygame.Color(color), (20, y, 20, 20))
-            self.screen.blit(FONT.render(name, True, (0, 0, 0)), (50, y))
+            self.screen.blit(FONT.render(label, True, (0, 0, 0)), (50, y))
             y += 30
 
     def draw_board(self):
@@ -113,6 +122,17 @@ class GameBoard:
             self.draw_players()
             self.draw_board()
             self.draw_cursor()
+
+            if not self.winner:
+                percentages = self.calculate_ownership()
+                for name, percent in percentages.items():
+                    if percent >= WIN_REQUIRE:
+                        self.winner = name
+                        break
+
+            if self.winner:
+                self.draw_victory_screen(self.winner)
+
             pygame.display.flip()
             self.clock.tick(60)
 
@@ -131,6 +151,8 @@ class GameBoard:
                 self.handle_click(pygame.mouse.get_pos())
 
     def handle_click(self, pos):
+        if self.winner:
+            return
         if any(sq.animating and sq.locked_by == self.my_color for row in self.squares for sq in row):
             return
 
@@ -173,6 +195,34 @@ class GameBoard:
                         square.animating = False
                         square.animation_progress = 100
                         square.locked_by = None
+
+    def calculate_ownership(self):
+        color_to_player = {v: k for k, v in self.player_colors.items()}
+        counts = {name: 0 for name in self.player_colors}
+        total = GRID_SIZE * GRID_SIZE
+
+        for row in self.squares:
+            for square in row:
+                player_name = color_to_player.get(square.claimed_by)
+                if player_name:
+                    counts[player_name] += 1
+
+        percentages = {}
+        for name, count in counts.items():
+            percentages[name] = int((count / total) * 100)
+
+        return percentages
+    
+    def draw_victory_screen(self, winner_name):
+        overlay = pygame.Surface((WIDTH, HEIGHT))
+        overlay.set_alpha(180)
+        overlay.fill((255, 255, 255))
+        self.screen.blit(overlay, (0, 0))
+
+        text = BIG_FONT.render(f"{winner_name} wins!", True, (0, 0, 0))
+        text_rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+        self.screen.blit(text, text_rect)
+
 
 
 if __name__ == "__main__":
