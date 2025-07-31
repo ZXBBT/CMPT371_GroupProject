@@ -10,7 +10,7 @@ SIDE_WIDTH = 180
 WIDTH = SIDE_WIDTH + GRID_SIZE * SQUARE_SIZE
 HEIGHT = GRID_SIZE * SQUARE_SIZE
 
-ANIMATION_SPEED = 1
+ANIMATION_SPEED = 2
 WIN_REQUIRE = 30
 
 FONT = pygame.font.SysFont("Arial", 18)
@@ -114,7 +114,7 @@ class GameBoard:
 
     def run(self):
         while self.running and self.network.running:
-            self.assign_colors()  # continuously sync
+            #self.assign_colors()  # continuously sync
             self.update_cursor()
             self.handle_events()
             self.update_animations()
