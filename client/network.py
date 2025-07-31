@@ -155,25 +155,35 @@ class NetworkManager:
                 data = self.client_socket.recv(1024).decode()
                 if not data:
                     break
-                
-                if data.startswith("MSG:"):
+
+                # Handle multiple GAME messages stuck together (TCP stream issue)
+                if data.startswith("GAME:"):
+                    messages = data.split("GAME:")
+                    for msg in messages:
+                        if not msg.strip():
+                            continue
+                        msg = "GAME:" + msg  # reattach prefix
+                        if self.message_handler:
+                            self.message_handler(msg)
+
+                # Handle single MSG or PLAYERS or shutdown message
+                elif data.startswith("MSG:"):
                     self.add_message(data.split(":", 1)[1])
                 elif data.startswith("PLAYERS:"):
                     with self.lock:
                         self.players = data.split(":")[1].split(",")
                     if self.player_update_handler:
                         self.player_update_handler(self.players)
-                elif data.startswith("GAME:"):
-                    if self.message_handler:
-                        self.message_handler(data)
                 elif data == "SERVER_SHUTDOWN":
                     self.add_message("Server has been shut down")
                     break
+
             except Exception as e:
                 if self.running:
                     print(f"Error receiving messages: {e}")
                 break
-        
+
+        # Clean up socket on exit
         if self.client_socket:
             try:
                 if self.running:

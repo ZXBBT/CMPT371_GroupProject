@@ -95,13 +95,13 @@ class Square:
 class GameBoard:
     def __init__(self, network_manager):   
         self.network = network_manager
-        self.network.set_message_handler(self.handle_game_message)
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         self.squares = [[Square(r, c) for c in range(GRID_SIZE)] for r in range(GRID_SIZE)]
         self.clock = pygame.time.Clock()
         self.running = True
         self.mouse_down = False
         self.current_square = None  # Track which square is being drawn on
+        self.other_cursors = {}
 
         self.player_colors = {}
         self.pen_images = {}
@@ -113,6 +113,8 @@ class GameBoard:
         self.assign_colors()
         self.load_pen_images()
         self.update_cursor()
+
+        self.network.set_message_handler(self.handle_game_message)
 
     def assign_colors(self):
         with self.network.lock:
@@ -143,6 +145,9 @@ class GameBoard:
                 }
 
     def update_cursor(self):
+        x, y = pygame.mouse.get_pos()
+        self.network.send_game_command(f"CURSOR:{self.my_color}:{x},{y}")
+
         if self.my_color and self.pen_images.get(self.my_color, {}).get('image'):
             self.cursor_img = self.pen_images[self.my_color]
             pygame.mouse.set_visible(False)
@@ -193,6 +198,7 @@ class GameBoard:
             self.clock.tick(60)
 
     def draw_cursor(self):
+        # Draw your own cursor
         if self.cursor_img and self.cursor_img['image']:
             x, y = pygame.mouse.get_pos()
             offset_x, offset_y = self.cursor_img['offset']
@@ -200,6 +206,16 @@ class GameBoard:
                 self.cursor_img['image'], 
                 (x - offset_x, y - offset_y)
             )
+
+        # Draw other players' cursors
+        for color, (x, y) in self.other_cursors.items():
+            img_data = self.pen_images.get(color)
+            if img_data and img_data['image']:
+                offset_x, offset_y = img_data['offset']
+                self.screen.blit(
+                    img_data['image'],
+                    (x - offset_x, y - offset_y)
+                )
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -232,7 +248,7 @@ class GameBoard:
     def handle_mouse_motion(self, pos):
         if self.winner or not self.current_square:
             return
-        
+
         # Check if we left the current square
         if not self.current_square.contains(pos):
             self.network.send_game_command(
@@ -335,6 +351,17 @@ class GameBoard:
                 square.reset_drawing()
             except Exception as e:
                 print(f"Invalid RESET message: {message} ({e})")
+
+        elif message.startswith("GAME:CURSOR:"):
+            try:
+                _, data = message.split("GAME:CURSOR:")
+                color, pos_str = data.split(":")
+                if color != self.my_color:  # Don't track your own
+                    x, y = map(int, pos_str.split(","))
+                    self.other_cursors[color] = (x, y)
+            except Exception as e:
+                print(f"Invalid CURSOR message: {message} ({e})")
+
 
     def calculate_ownership(self):
         color_to_player = {v: k for k, v in self.player_colors.items()}
