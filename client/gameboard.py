@@ -1,9 +1,11 @@
+import os
 import pygame
 import numpy as np
 from network import NetworkManager
 
 pygame.init()
 pygame.font.init()
+ASSETS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'images'))
 
 GRID_SIZE = 8
 SQUARE_SIZE = 80
@@ -126,7 +128,7 @@ class GameBoard:
     def load_pen_images(self):
         for color in PLAYER_COLORS:
             try:
-                img = pygame.image.load(f"../images/{color}_pen.png").convert_alpha()
+                img = pygame.image.load(os.path.join(ASSETS_DIR, f"{color}_pen.png")).convert_alpha()
                 img = pygame.transform.scale(img, (40, 40))
                 
                 scale_factor = 40 / 1024
@@ -138,7 +140,7 @@ class GameBoard:
                     'offset': (offset_x, offset_y)
                 }
             except Exception as e:
-                print(f"Missing or failed to load image: pens/{color}_pen.png")
+                print(f"Missing or failed to load image: images/{color}_pen.png")
                 self.pen_images[color] = {
                     'image': None,
                     'offset': (0, 0)
