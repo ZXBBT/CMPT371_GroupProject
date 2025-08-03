@@ -93,6 +93,16 @@ class NetworkManager:
                     message = data.split(":", 1)[1]
                     self.broadcast(f"MSG:{message}", exclude_socket=client_socket)
                 elif data.startswith("GAME:"):
+                    if data.startswith("GAME:LOCK:"):
+                        if self.is_host:
+                            self.broadcast(data)
+                        if self.message_handler:
+                            self.message_handler(data)
+                    elif data.startswith("GAME:UNLOCK:"):
+                        if self.is_host:
+                            self.broadcast(data)
+                        if self.message_handler:
+                            self.message_handler(data)
                     if data.startswith("GAME:CLAIM:") and self.is_host:
                         try:
                             _, claim_data = data.split("GAME:CLAIM:")

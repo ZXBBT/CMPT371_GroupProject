@@ -243,10 +243,18 @@ class GameBoard:
         for row in self.squares:
             for square in row:
                 if square.contains(pos):
-                    # Only allow drawing if square isn't locked or claimed by others
                     if (square.locked_by is None or square.locked_by == self.my_color) and \
                     (square.claimed_by is None or square.claimed_by == self.my_color):
+                        # Start drawing locally first
                         square.start_drawing(self.my_color)
+                        # Then send network commands
+                        self.network.send_game_command(f"LOCK:{square.row},{square.col}:{self.my_color}")
+                        # Send initial DRAW command to sync starting point
+                        local_x = pos[0] - square.rect.x
+                        local_y = pos[1] - square.rect.y
+                        self.network.send_game_command(
+                            f"DRAW:{square.row},{square.col}:{local_x},{local_y}:{self.my_color}"
+                        )
                         self.current_square = square
                         return
 
@@ -296,6 +304,7 @@ class GameBoard:
                 self.network.send_game_command(
                     f"RESET:{self.current_square.row},{self.current_square.col}"
                 )
+                self.network.send_game_command(f"UNLOCK:{self.current_square.row},{self.current_square.col}")
             elif percentage >= 50:
                 self.network.send_game_command(
                     f"CLAIM:{self.current_square.row},{self.current_square.col}:{self.my_color}"
@@ -340,6 +349,10 @@ class GameBoard:
                 elif msg.startswith("GAME:CURSOR:"):
                     # For cursor messages, we just want the most recent position
                     last_messages["CURSOR"] = msg
+                elif msg.startswith("GAME:LOCK:"):
+                    last_messages["LOCK"] = msg
+                elif msg.startswith("GAME:UNLOCK:"):
+                    last_messages["UNLOCK"] = msg
             except:
                 continue  # Skip any malformed messages during classification
         
@@ -364,19 +377,21 @@ class GameBoard:
                     row, col = map(int, coord_str.split(","))
                     px, py = map(int, pixel_str.split(","))
                     square = self.squares[row][col]
-
-                    if square.locked_by is None:
-                        square.locked_by = color
+                    
+                    # Only process if square is locked by this color or not locked at all
+                    if square.locked_by is None or square.locked_by == color:
+                        if square.locked_by is None:
+                            square.locked_by = color
                         square.drawing = True
                         square.drawing_color = color
-
-                    # Apply 5x5 brush centered at (px, py)
-                    for dy in range(-2, 3):
-                        for dx in range(-2, 3):
-                            brush_px = px + dx
-                            brush_py = py + dy
-                            if 0 <= brush_px < SQUARE_SIZE and 0 <= brush_py < SQUARE_SIZE:
-                                square.pixel_grid[brush_py][brush_px] = 1
+                        
+                        # Apply drawing
+                        for dy in range(-2, 3):
+                            for dx in range(-2, 3):
+                                brush_px = px + dx
+                                brush_py = py + dy
+                                if 0 <= brush_px < SQUARE_SIZE and 0 <= brush_py < SQUARE_SIZE:
+                                    square.pixel_grid[brush_py][brush_px] = 1
 
                 elif msg_type == "RESET":
                     _, coord_str = msg.split("GAME:RESET:")
@@ -390,6 +405,21 @@ class GameBoard:
                     if color != self.my_color:  # Don't track your own
                         x, y = map(int, pos_str.split(","))
                         self.other_cursors[color] = (x, y)
+                
+                elif msg_type == "LOCK":
+                    _, data = msg.split("GAME:LOCK:")
+                    coord_str, color = data.split(":")
+                    row, col = map(int, coord_str.split(","))
+                    square = self.squares[row][col]
+                    if square.claimed_by is None:  # Only lock if not claimed
+                        square.locked_by = color
+
+                elif msg_type == "UNLOCK":
+                    _, coord_str = msg.split("GAME:UNLOCK:")
+                    row, col = map(int, coord_str.split(","))
+                    square = self.squares[row][col]
+                    if square.locked_by:  # Only unlock if currently locked
+                        square.locked_by = None
 
             except Exception as e:
                 print(f"Invalid {msg_type} message: {msg} ({e})")
