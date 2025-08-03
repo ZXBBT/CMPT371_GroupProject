@@ -1,9 +1,11 @@
+import os
 import pygame
 import numpy as np
 from network import NetworkManager
 
 pygame.init()
 pygame.font.init()
+ASSETS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'images'))
 
 GRID_SIZE = 8
 SQUARE_SIZE = 80
@@ -95,13 +97,13 @@ class Square:
 class GameBoard:
     def __init__(self, network_manager):   
         self.network = network_manager
-        self.network.set_message_handler(self.handle_game_message)
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         self.squares = [[Square(r, c) for c in range(GRID_SIZE)] for r in range(GRID_SIZE)]
         self.clock = pygame.time.Clock()
         self.running = True
         self.mouse_down = False
         self.current_square = None  # Track which square is being drawn on
+        self.other_cursors = {}
 
         self.player_colors = {}
         self.pen_images = {}
@@ -114,6 +116,8 @@ class GameBoard:
         self.load_pen_images()
         self.update_cursor()
 
+        self.network.set_message_handler(self.handle_game_message)
+
     def assign_colors(self):
         with self.network.lock:
             for i, name in enumerate(self.network.players):
@@ -124,7 +128,7 @@ class GameBoard:
     def load_pen_images(self):
         for color in PLAYER_COLORS:
             try:
-                img = pygame.image.load(f"../images/{color}_pen.png").convert_alpha()
+                img = pygame.image.load(os.path.join(ASSETS_DIR, f"{color}_pen.png")).convert_alpha()
                 img = pygame.transform.scale(img, (40, 40))
                 
                 scale_factor = 40 / 1024
@@ -136,13 +140,16 @@ class GameBoard:
                     'offset': (offset_x, offset_y)
                 }
             except Exception as e:
-                print(f"Missing or failed to load image: pens/{color}_pen.png")
+                print(f"Missing or failed to load image: images/{color}_pen.png")
                 self.pen_images[color] = {
                     'image': None,
                     'offset': (0, 0)
                 }
 
     def update_cursor(self):
+        x, y = pygame.mouse.get_pos()
+        self.network.send_game_command(f"CURSOR:{self.my_color}:{x},{y}")
+
         if self.my_color and self.pen_images.get(self.my_color, {}).get('image'):
             self.cursor_img = self.pen_images[self.my_color]
             pygame.mouse.set_visible(False)
@@ -193,6 +200,7 @@ class GameBoard:
             self.clock.tick(60)
 
     def draw_cursor(self):
+        # Draw your own cursor
         if self.cursor_img and self.cursor_img['image']:
             x, y = pygame.mouse.get_pos()
             offset_x, offset_y = self.cursor_img['offset']
@@ -200,6 +208,16 @@ class GameBoard:
                 self.cursor_img['image'], 
                 (x - offset_x, y - offset_y)
             )
+
+        # Draw other players' cursors
+        for color, (x, y) in self.other_cursors.items():
+            img_data = self.pen_images.get(color)
+            if img_data and img_data['image']:
+                offset_x, offset_y = img_data['offset']
+                self.screen.blit(
+                    img_data['image'],
+                    (x - offset_x, y - offset_y)
+                )
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -225,14 +243,25 @@ class GameBoard:
         for row in self.squares:
             for square in row:
                 if square.contains(pos):
-                    square.start_drawing(self.my_color)
-                    self.current_square = square
-                    return
+                    if (square.locked_by is None or square.locked_by == self.my_color) and \
+                    (square.claimed_by is None or square.claimed_by == self.my_color):
+                        # Start drawing locally first
+                        square.start_drawing(self.my_color)
+                        # Then send network commands
+                        self.network.send_game_command(f"LOCK:{square.row},{square.col}:{self.my_color}")
+                        # Send initial DRAW command to sync starting point
+                        local_x = pos[0] - square.rect.x
+                        local_y = pos[1] - square.rect.y
+                        self.network.send_game_command(
+                            f"DRAW:{square.row},{square.col}:{local_x},{local_y}:{self.my_color}"
+                        )
+                        self.current_square = square
+                        return
 
     def handle_mouse_motion(self, pos):
         if self.winner or not self.current_square:
             return
-        
+
         # Check if we left the current square
         if not self.current_square.contains(pos):
             self.network.send_game_command(
@@ -251,9 +280,21 @@ class GameBoard:
         #print(f"[SEND] DRAW:{self.current_square.row},{self.current_square.col}:{local_x},{local_y}:{self.my_color}", flush=True)
 
     def handle_mouse_up(self):
-        if self.winner or not self.current_square:
+        # Check for winner first
+        if self.winner:
             return
         
+        # Check if current_square exists before accessing its properties
+        if not self.current_square:
+            return
+        
+        # Check if square is locked or claimed by someone else
+        if self.current_square.locked_by and self.current_square.locked_by != self.my_color:
+            return
+        if self.current_square.claimed_by and self.current_square.claimed_by != self.my_color:
+            return
+        
+        # Process the drawing
         if self.current_square.drawing:
             filled_pixels = np.sum(self.current_square.pixel_grid)
             total_pixels = SQUARE_SIZE * SQUARE_SIZE
@@ -263,11 +304,13 @@ class GameBoard:
                 self.network.send_game_command(
                     f"RESET:{self.current_square.row},{self.current_square.col}"
                 )
+                self.network.send_game_command(f"UNLOCK:{self.current_square.row},{self.current_square.col}")
             elif percentage >= 50:
                 self.network.send_game_command(
                     f"CLAIM:{self.current_square.row},{self.current_square.col}:{self.my_color}"
                 )
         
+        # Clean up
         self.current_square.stop_drawing()
         self.current_square = None
 
@@ -287,54 +330,100 @@ class GameBoard:
                     return
 
     def handle_game_message(self, message):
-        if message.startswith("GAME:CLAIM:"):
+        # Handle potential message concatenation
+        messages = message.split("GAME:")[1:]  # Split and ignore empty first element
+        messages = ["GAME:" + msg for msg in messages]  # Reattach prefix
+        
+        # Track the most recent message of each type
+        last_messages = {}
+        
+        # Classify messages by type and keep only the last one of each
+        for msg in messages:
             try:
-                _, data = message.split("GAME:CLAIM:")
-                coord_str, color = data.split(":")
-                row, col = map(int, coord_str.split(","))
-                square = self.squares[row][col]
-                if square.claimed_by is not None:
-                    return
-                square.claimed_by = color
-                square.animating = True
-                square.animation_progress = 0
-                square.locked_by = None
-            except Exception as e:
-                print(f"Invalid message: {message} ({e})")
-
-        elif message.startswith("GAME:DRAW:"):
-            #print(f"[RECV] {message}", flush=True)
+                if msg.startswith("GAME:CLAIM:"):
+                    last_messages["CLAIM"] = msg
+                elif msg.startswith("GAME:DRAW:"):
+                    last_messages["DRAW"] = msg
+                elif msg.startswith("GAME:RESET:"):
+                    last_messages["RESET"] = msg
+                elif msg.startswith("GAME:CURSOR:"):
+                    # For cursor messages, we just want the most recent position
+                    last_messages["CURSOR"] = msg
+                elif msg.startswith("GAME:LOCK:"):
+                    last_messages["LOCK"] = msg
+                elif msg.startswith("GAME:UNLOCK:"):
+                    last_messages["UNLOCK"] = msg
+            except:
+                continue  # Skip any malformed messages during classification
+        
+        # Process only the last message of each type
+        for msg_type, msg in last_messages.items():
             try:
-                _, data = message.split("GAME:DRAW:")
-                coord_str, pixel_str, color = data.split(":")
-                row, col = map(int, coord_str.split(","))
-                px, py = map(int, pixel_str.split(","))
-                square = self.squares[row][col]
+                if msg_type == "CLAIM":
+                    _, data = msg.split("GAME:CLAIM:")
+                    coord_str, color = data.split(":")
+                    row, col = map(int, coord_str.split(","))
+                    square = self.squares[row][col]
+                    if square.claimed_by is not None:
+                        continue
+                    square.claimed_by = color
+                    square.animating = True
+                    square.animation_progress = 0
+                    square.locked_by = None
 
-                if square.locked_by is None:
-                    square.locked_by = color
-                    square.drawing = True
-                    square.drawing_color = color
+                elif msg_type == "DRAW":
+                    _, data = msg.split("GAME:DRAW:")
+                    coord_str, pixel_str, color = data.split(":")
+                    row, col = map(int, coord_str.split(","))
+                    px, py = map(int, pixel_str.split(","))
+                    square = self.squares[row][col]
+                    
+                    # Only process if square is locked by this color or not locked at all
+                    if square.locked_by is None or square.locked_by == color:
+                        if square.locked_by is None:
+                            square.locked_by = color
+                        square.drawing = True
+                        square.drawing_color = color
+                        
+                        # Apply drawing
+                        for dy in range(-2, 3):
+                            for dx in range(-2, 3):
+                                brush_px = px + dx
+                                brush_py = py + dy
+                                if 0 <= brush_px < SQUARE_SIZE and 0 <= brush_py < SQUARE_SIZE:
+                                    square.pixel_grid[brush_py][brush_px] = 1
 
-                # Apply 5x5 brush centered at (px, py)
-                for dy in range(-2, 3):
-                    for dx in range(-2, 3):
-                        brush_px = px + dx
-                        brush_py = py + dy
-                        if 0 <= brush_px < SQUARE_SIZE and 0 <= brush_py < SQUARE_SIZE:
-                            square.pixel_grid[brush_py][brush_px] = 1
+                elif msg_type == "RESET":
+                    _, coord_str = msg.split("GAME:RESET:")
+                    row, col = map(int, coord_str.split(","))
+                    square = self.squares[row][col]
+                    square.reset_drawing()
+
+                elif msg_type == "CURSOR":
+                    _, data = msg.split("GAME:CURSOR:")
+                    color, pos_str = data.split(":")
+                    if color != self.my_color:  # Don't track your own
+                        x, y = map(int, pos_str.split(","))
+                        self.other_cursors[color] = (x, y)
+                
+                elif msg_type == "LOCK":
+                    _, data = msg.split("GAME:LOCK:")
+                    coord_str, color = data.split(":")
+                    row, col = map(int, coord_str.split(","))
+                    square = self.squares[row][col]
+                    if square.claimed_by is None:  # Only lock if not claimed
+                        square.locked_by = color
+
+                elif msg_type == "UNLOCK":
+                    _, coord_str = msg.split("GAME:UNLOCK:")
+                    row, col = map(int, coord_str.split(","))
+                    square = self.squares[row][col]
+                    if square.locked_by:  # Only unlock if currently locked
+                        square.locked_by = None
 
             except Exception as e:
-                print(f"Invalid DRAW message: {message} ({e})")
+                print(f"Invalid {msg_type} message: {msg} ({e})")
 
-        elif message.startswith("GAME:RESET:"):
-            try:
-                _, coord_str = message.split("GAME:RESET:")
-                row, col = map(int, coord_str.split(","))
-                square = self.squares[row][col]
-                square.reset_drawing()
-            except Exception as e:
-                print(f"Invalid RESET message: {message} ({e})")
 
     def calculate_ownership(self):
         color_to_player = {v: k for k, v in self.player_colors.items()}
