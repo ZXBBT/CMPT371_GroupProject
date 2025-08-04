@@ -106,18 +106,58 @@ class NetworkManager:
         except:
             return "127.0.0.1"
         finally:
-            s.close()
-        
-    def poll(self, buffer_size: int = 1024) -> str:
-        buffer = create_string_buffer(buffer_size)
-        success = _lib.poll_network_message(self._handle, buffer, buffer_size)
-        if not success:
-            return None
-        raw_message = buffer.value.decode()
+            if username:
+                with self.lock:
+                    if username in self.players:
+                        self.players.remove(username)
+                        self.broadcast(f"PLAYERS:{','.join(self.players)}")
+                        self.add_message(f"{username} left the lobby")
+            try:
+                client_socket.close()
+            except:
+                pass
+            with self.lock:
+                if client_socket in self.clients:
+                    self.clients.remove(client_socket)
 
-        if raw_message.startswith("PLAYERS:"):
-            plist = raw_message.split(":",1)[1].split(",")
-            with self.lock:  self.players = plist
+    def receive_messages(self):
+        while self.running:
+            try:
+                data = self.client_socket.recv(1024).decode()
+                if not data:
+                    break
+                
+                if data.startswith("MSG:"):
+                    self.add_message(data.split(":", 1)[1])
+                elif data.startswith("PLAYERS:"):
+                    with self.lock:
+                        self.players = data.split(":")[1].split(",")
+                    if self.player_update_handler:
+                        self.player_update_handler(self.players)
+                elif data.startswith("GAME:"):
+                    if self.message_handler:
+                        self.message_handler(data)
+                elif data == "SERVER_SHUTDOWN":
+                    self.add_message("Server has been shut down")
+                    break
+            except Exception as e:
+                if self.running:
+                    print(f"Error receiving messages: {e}")
+                break
+        
+        if self.client_socket:
+            try:
+                if self.running:
+                    self.client_socket.send(f"LEAVE:{self.username}".encode())
+                self.client_socket.close()
+            except:
+                pass
+        self.running = False
+
+    def broadcast(self, message, exclude_socket=None):
+        if message.startswith("PLAYERS:"):
+            with self.lock:
+                self.players = message.split(":")[1].split(",")
             if self.player_update_handler:
                 self.player_update_handler(plist)
 
