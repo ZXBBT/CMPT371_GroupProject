@@ -6,6 +6,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <queue>
+#include <mutex>
 
 NetworkManager::NetworkManager(Role role) {
     this->role = role;
@@ -95,7 +97,9 @@ void NetworkManager::receiveLoop(int sockfd) {
             break;
         }
         string msg(buffer);
-        cout << "Received: " << msg << "\n";
+        // cout << "Received: " << msg << "\n";
+        lock_guard<mutex> lock(queueMutex);
+        messageQueue.push(msg);
     }
     close(sockfd);
 }
@@ -112,6 +116,16 @@ void NetworkManager::broadcast(const std::string& message) {
     for (vector<int>::iterator it = clientSockets.begin(); it != clientSockets.end(); ++it) {
         send(*it, message.c_str(), message.size(), 0);
     }
+}
+
+bool NetworkManager::pollMessage(string& message) {
+    lock_guard<mutex> lock(queueMutex);
+    if (!messageQueue.empty()) {
+        message = messageQueue.front();
+        messageQueue.pop();
+        return true;
+    }
+    return false;
 }
 
 void NetworkManager::shutdown() {

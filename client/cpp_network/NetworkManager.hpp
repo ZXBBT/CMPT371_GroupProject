@@ -5,6 +5,7 @@
 #include <vector>
 #include <thread>
 #include <mutex>
+#include <queue>
 
 using namespace std;
 
@@ -19,6 +20,7 @@ public:
     ~NetworkManager();
 
     bool start(const string& ip, int port);
+    bool pollMessage(string& message);
     void sendMessage(const string& message);
     void shutdown();
 
@@ -30,6 +32,8 @@ private:
     thread listenerThread;
     mutex clientMutex;
     bool running;
+    queue<string> messageQueue;
+    mutex queueMutex;
 
     void hostLoop(int port);
     void clientLoop(const string& ip, int port);
