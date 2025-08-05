@@ -31,33 +31,26 @@ class Square:
         self.drawing_color = None
         self.locked_by = None
         self.pixel_grid = np.zeros((SQUARE_SIZE, SQUARE_SIZE))  # Track colored pixels
+        self.drawing_surface = None  # Initialize once
         
     def draw(self, screen):
-        # Draw base square
         pygame.draw.rect(screen, (255, 255, 255), self.rect)
         
-        # Draw claimed color if fully claimed
         if self.claimed_by:
             pygame.draw.rect(screen, pygame.Color(self.claimed_by), self.rect)
-        
-        # Optimized drawing - only redraw changed pixels
-        if self.drawing_color:
-            # Create a surface once and reuse it
-            if not hasattr(self, 'drawing_surface'):
+        elif self.drawing_color and self.drawing:
+            if self.drawing_surface is None:
                 self.drawing_surface = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
-            
-            # Clear the surface
             self.drawing_surface.fill((0, 0, 0, 0))
-            
-            # Draw colored pixels
             color = pygame.Color(self.drawing_color)
+            # Only redraw if actively drawing
             for y in range(SQUARE_SIZE):
                 for x in range(SQUARE_SIZE):
                     if self.pixel_grid[y][x] > 0:
                         self.drawing_surface.set_at((x, y), color)
-            
-            # Blit the drawing surface
             screen.blit(self.drawing_surface, self.rect)
+        
+        pygame.draw.rect(screen, (0, 0, 0), self.rect, 2)
         
         # Draw border
         pygame.draw.rect(screen, (0, 0, 0), self.rect, 2)
@@ -117,7 +110,6 @@ class GameBoard:
         self.last_draw_time = 0
         
         self.last_cursor_update = 0
-        self.cursor_update_interval = 20  # Update every 20ms
         self.last_cursor_pos = (0, 0)  # Track last sent position
 
         self.player_colors = {}
@@ -164,17 +156,9 @@ class GameBoard:
     def update_cursor(self):
         current_time = pygame.time.get_ticks()
         x, y = pygame.mouse.get_pos()
-        
-        # Only send update if:
-        # 1. The interval has passed AND
-        # 2. The cursor has moved significantly (optional)
-        if (current_time - self.last_cursor_update >= self.cursor_update_interval and
-            (abs(x - self.last_cursor_pos[0]) > 5 or  # Minimum 5 pixel movement
-            abs(y - self.last_cursor_pos[1]) > 5)):
-            
-            self.network.send_game_command(f"CURSOR:{self.my_color}:{x},{y}")
-            self.last_cursor_update = current_time
-            self.last_cursor_pos = (x, y)
+        self.network.send_game_command(f"CURSOR:{self.my_color}:{x},{y}")
+        self.last_cursor_update = current_time
+        self.last_cursor_pos = (x, y)
         
         # Update cursor appearance locally regardless of network updates
         if self.my_color and self.pen_images.get(self.my_color, {}).get('image'):
@@ -294,9 +278,9 @@ class GameBoard:
         if self.winner or not self.current_square:
             return
             
-        # Only send network updates every 25ms (adjust as needed)
+        # Only send network updates every 1ms (adjust as needed)
         current_time = pygame.time.get_ticks()
-        if current_time - self.last_draw_time < 25:
+        if current_time - self.last_draw_time < 1:
             # Process drawing locally without network update
             self.current_square.update_drawing(pos)
             return
@@ -404,12 +388,12 @@ class GameBoard:
                     coord_str, color = data.split(":")
                     row, col = map(int, coord_str.split(","))
                     square = self.squares[row][col]
-                    if square.claimed_by is not None:
-                        continue
-                    square.claimed_by = color
-                    square.animating = True
-                    square.animation_progress = 0
-                    square.locked_by = None
+                    if square.claimed_by is None:
+                        square.claimed_by = color
+                        square.drawing = False
+                        square.pixel_grid.fill(0)  # Clear pixel data
+                        if hasattr(square, 'drawing_surface'):
+                            square.drawing_surface = None  # Free surface
 
                 elif msg_type == "DRAW":
                     _, data = msg.split("GAME:DRAW:")
