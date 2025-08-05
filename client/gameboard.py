@@ -70,9 +70,9 @@ class Square:
             local_x = mouse_pos[0] - self.rect.x
             local_y = mouse_pos[1] - self.rect.y
             
-            # Color a 5x5 area around the mouse for smoother drawing
-            for dy in range(-2, 3):
-                for dx in range(-2, 3):
+            # Color a 10x10 area around the mouse for smoother drawing
+            for dy in range(-4, 6):
+                for dx in range(-4, 6):
                     px = local_x + dx
                     py = local_y + dy
                     if 0 <= px < SQUARE_SIZE and 0 <= py < SQUARE_SIZE:
@@ -410,8 +410,8 @@ class GameBoard:
                             square.drawing_color = color
                         
                         # Apply drawing with bounds checking
-                        for dy in range(-2, 3):
-                            for dx in range(-2, 3):
+                        for dy in range(-4, 6):
+                            for dx in range(-4, 6):
                                 brush_px = px + dx
                                 brush_py = py + dy
                                 if 0 <= brush_px < SQUARE_SIZE and 0 <= brush_py < SQUARE_SIZE:
