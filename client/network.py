@@ -1,5 +1,6 @@
 import socket
 import threading
+import time
 
 class NetworkManager:
     def __init__(self, username, port, is_host=False, server_ip=None):
@@ -128,11 +129,11 @@ class NetworkManager:
                     with self.lock:
                         if username in self.players:
                             self.players.remove(username)
+
                     self.broadcast(f"PLAYERS:{','.join(self.players)}")
                     self.add_message(f"{username} left the lobby")
                     break
         except OSError as sock_err:
-            # socket-level errors (e.g. Bad file descriptor)
             print(f"[Socket Error] {sock_err!r}")
             try:
                 client_socket.close()
@@ -269,9 +270,12 @@ class NetworkManager:
         if not self.is_host and self.client_socket:
             try:
                 self.client_socket.send(f"LEAVE:{self.username}".encode())
+                self.client_socket.shutdown(socket.SHUT_WR)
+                time.sleep(0.5) 
                 self.client_socket.close()
             except:
                 pass
+
         if self.is_host and self.server_socket:
             with self.lock:
                 for client in self.clients:
