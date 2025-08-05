@@ -31,26 +31,25 @@ class Square:
         self.drawing_color = None
         self.locked_by = None
         self.pixel_grid = np.zeros((SQUARE_SIZE, SQUARE_SIZE))  # Track colored pixels
-        self.drawing_surface = None  # Initialize once
+        self.drawing_surface = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
         
     def draw(self, screen):
+        # Draw base square
         pygame.draw.rect(screen, (255, 255, 255), self.rect)
         
+        # Draw claimed color if fully claimed
         if self.claimed_by:
             pygame.draw.rect(screen, pygame.Color(self.claimed_by), self.rect)
-        elif self.drawing_color and self.drawing:
-            if self.drawing_surface is None:
-                self.drawing_surface = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
-            self.drawing_surface.fill((0, 0, 0, 0))
+        
+        # Draw current drawing state
+        if self.drawing_color and self.drawing:
+            self.drawing_surface.fill((0, 0, 0, 0))  # Clear the surface
             color = pygame.Color(self.drawing_color)
-            # Only redraw if actively drawing
             for y in range(SQUARE_SIZE):
                 for x in range(SQUARE_SIZE):
                     if self.pixel_grid[y][x] > 0:
                         self.drawing_surface.set_at((x, y), color)
             screen.blit(self.drawing_surface, self.rect)
-        
-        pygame.draw.rect(screen, (0, 0, 0), self.rect, 2)
         
         # Draw border
         pygame.draw.rect(screen, (0, 0, 0), self.rect, 2)
