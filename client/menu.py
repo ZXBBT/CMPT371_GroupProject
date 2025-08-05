@@ -187,9 +187,23 @@ def create_game_screen():
         clock.tick(60)
 
 def join_game_screen():
+    error_message = ""
     username_box = InputBox(WIDTH // 2 - 100, 120, 200, 40, "Username")
     server_ip_box = InputBox(WIDTH // 2 - 100, 190, 200, 40, "Server IP")
     port_box = InputBox(WIDTH // 2 - 100, 260, 200, 40, "Port", "25565")
+
+    def try_join_server(username, server_ip, port_text):
+        nonlocal error_message
+        error_message = ""
+        try:
+            port = int(port_text)
+            network = NetworkManager(username, port, server_ip=server_ip)
+            if not network.running:
+                raise Exception("Connection failed")
+            LobbyScreen(network).run()
+        except Exception as e:
+            error_message = "Failed to connect to server"
+
     buttons = [
         Button(
             "Join Server",
@@ -197,15 +211,8 @@ def join_game_screen():
             330,
             200,
             50,
-            lambda: LobbyScreen(
-                NetworkManager(
-                    username_box.text,
-                    int(port_box.text),
-                    server_ip=server_ip_box.text
-                )
-            ).run()
-        ),
-        Button("Back", 20, HEIGHT - 70, 100, 40, lambda: "back")
+            lambda: try_join_server(username_box.text, server_ip_box.text, port_box.text)
+        )
     ]
 
     clock = pygame.time.Clock()
@@ -235,6 +242,10 @@ def join_game_screen():
 
         for button in buttons:
             button.draw(SCREEN)
+
+        if error_message:
+            error_surf = SMALL_FONT.render(error_message, True, (255, 0, 0))
+            SCREEN.blit(error_surf, (WIDTH // 2 - error_surf.get_width() // 2, 10))
 
         pygame.display.flip()
         clock.tick(60)
