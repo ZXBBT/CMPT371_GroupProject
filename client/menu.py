@@ -79,10 +79,50 @@ class LobbyScreen:
             self.network.send_game_command("START")
             self.handle_network_message("GAME:START")
 
+    # def run(self):
+    #     clock = pygame.time.Clock()
+
+    #     while self.network.running:
+    #         for event in pygame.event.get():
+    #             if event.type == pygame.QUIT:
+    #                 self.quit_lobby()
+    #                 return
+
+    #             if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+    #                 message = self.input_box.text.strip()
+    #                 if message:
+    #                     self.network.send_message(message)
+    #                     self.input_box.text = ""
+
+    #             if event.type == pygame.USEREVENT and event.dict.get("start_game"):
+    #                 print("Launching GameBoard...")
+    #                 GameBoard(self.network).run()
+    #                 pygame.quit()
+    #                 sys.exit()
+
+    #             self.input_box.handle_event(event)
+    #             self.ready_button.handle_event(event)
+    #             action = self.exit_button.handle_event(event)
+    #             if action is not None:
+    #                 self.quit_lobby()
+    #                 return
+
+    #         self.draw()
+    #         pygame.display.flip()
+    #         clock.tick(60)
+
     def run(self):
         clock = pygame.time.Clock()
 
-        while self.network.running:
+        while True:
+            if not self.network.running:
+                print("[DEBUG] Disconnected from server, returning to main menu...")
+                from menu import main_menu
+                pygame.display.set_mode((600, 400))
+                pygame.mouse.set_visible(True)
+                main_menu()
+                return
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.quit_lobby()
@@ -97,8 +137,10 @@ class LobbyScreen:
                 if event.type == pygame.USEREVENT and event.dict.get("start_game"):
                     print("Launching GameBoard...")
                     GameBoard(self.network).run()
-                    pygame.quit()
-                    sys.exit()
+                    pygame.display.set_mode((600, 400))
+                    pygame.mouse.set_visible(True)
+                    main_menu()
+                    return
 
                 self.input_box.handle_event(event)
                 self.ready_button.handle_event(event)
@@ -110,6 +152,8 @@ class LobbyScreen:
             self.draw()
             pygame.display.flip()
             clock.tick(60)
+
+
 
     def on_ready_toggle(self, player_id, is_ready):
         self.player_ready[player_id] = is_ready
