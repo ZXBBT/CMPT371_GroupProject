@@ -31,25 +31,22 @@ class Square:
         self.drawing_color = None
         self.locked_by = None
         self.pixel_grid = np.zeros((SQUARE_SIZE, SQUARE_SIZE))  # Track colored pixels
-        self.drawing_surface = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
         
     def draw(self, screen):
-        # Draw base square
-        pygame.draw.rect(screen, (255, 255, 255), self.rect)
-        
-        # Draw claimed color if fully claimed
-        if self.claimed_by:
+        # Draw base square (only if not claimed)
+        if not self.claimed_by:
+            pygame.draw.rect(screen, (255, 255, 255), self.rect)
+            
+            # Draw current drawing state
+            if self.drawing and self.drawing_color:
+                color = pygame.Color(self.drawing_color)
+                for y in range(SQUARE_SIZE):
+                    for x in range(SQUARE_SIZE):
+                        if self.pixel_grid[y][x]:
+                            screen.fill(color, (self.rect.x + x, self.rect.y + y, 1, 1))
+        else:
+            # Draw claimed color
             pygame.draw.rect(screen, pygame.Color(self.claimed_by), self.rect)
-        
-        # Draw current drawing state
-        if self.drawing_color and self.drawing:
-            self.drawing_surface.fill((0, 0, 0, 0))  # Clear the surface
-            color = pygame.Color(self.drawing_color)
-            for y in range(SQUARE_SIZE):
-                for x in range(SQUARE_SIZE):
-                    if self.pixel_grid[y][x] > 0:
-                        self.drawing_surface.set_at((x, y), color)
-            screen.blit(self.drawing_surface, self.rect)
         
         # Draw border
         pygame.draw.rect(screen, (0, 0, 0), self.rect, 2)
@@ -390,10 +387,8 @@ class GameBoard:
                     if square.claimed_by is None:
                         square.claimed_by = color
                         square.drawing = False
-                        square.pixel_grid.fill(0)  # Clear pixel data
-                        if hasattr(square, 'drawing_surface'):
-                            square.drawing_surface = None  # Free surface
-
+                        square.pixel_grid.fill(False)  # Reset drawing state
+                        
                 elif msg_type == "DRAW":
                     _, data = msg.split("GAME:DRAW:")
                     coord_str, pixel_str, color = data.split(":")
@@ -401,21 +396,19 @@ class GameBoard:
                     px, py = map(int, pixel_str.split(","))
                     square = self.squares[row][col]
                     
-                    # Only process if square is locked by this color or not locked at all
-                    if square.locked_by is None or square.locked_by == color:
-                        if square.locked_by is None:
+                    if square.claimed_by is None:  # Skip if already claimed
+                        if square.locked_by is None or square.locked_by == color:
                             square.locked_by = color
-                        if not square.drawing or square.drawing_color != color:
                             square.drawing = True
                             square.drawing_color = color
-                        
-                        # Apply drawing with bounds checking
-                        for dy in range(-4, 6):
-                            for dx in range(-4, 6):
-                                brush_px = px + dx
-                                brush_py = py + dy
-                                if 0 <= brush_px < SQUARE_SIZE and 0 <= brush_py < SQUARE_SIZE:
-                                    square.pixel_grid[brush_py][brush_px] = 1
+                            
+                            # Mark pixels in a 10x10 area
+                            for dy in range(-4, 6):
+                                for dx in range(-4, 6):
+                                    brush_px = px + dx
+                                    brush_py = py + dy
+                                    if 0 <= brush_px < SQUARE_SIZE and 0 <= brush_py < SQUARE_SIZE:
+                                        square.pixel_grid[brush_py][brush_px] = True
 
                 elif msg_type == "RESET":
                     _, coord_str = msg.split("GAME:RESET:")
