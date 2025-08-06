@@ -1,3 +1,6 @@
+# Implements the game's main menu, create/join game screens, and lobby interface
+# Handles user input, screen navigation, and preparation before starting the main game
+
 import pygame
 import sys
 from utils import Button, InputBox, ReadyButton
@@ -6,23 +9,22 @@ from gameboard import GameBoard
 
 pygame.init()
 pygame.font.init()
-
 WIDTH, HEIGHT = 600, 400
 SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Deny and Conquer")
-
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 BLUE = (0, 120, 215)
-
 TITLE_FONT = pygame.font.SysFont("Arial", 48, bold=True)
 MEDIUM_FONT = pygame.font.SysFont("Arial", 24)
 SMALL_FONT = pygame.font.SysFont("Arial", 16)
 
+# Quit pygame and exit the program
 def exit_game():
     pygame.quit()
     sys.exit()
 
+# Represents the game lobby where players chat, toggle readiness, and wait for the game to start
 class LobbyScreen:
     def __init__(self, network_manager):
         self.network = network_manager
@@ -38,6 +40,7 @@ class LobbyScreen:
         self.network.set_message_handler(self.handle_network_message)
         self.network.set_player_update_handler(self.handle_player_update)
 
+    # React to incoming READY or START messages from the server
     def handle_network_message(self, message):
         if message.startswith("GAME:READY:"):
             parts = message.split(":")
@@ -62,6 +65,7 @@ class LobbyScreen:
             print("GAME:START received")
             pygame.event.post(pygame.event.Event(pygame.USEREVENT, {"start_game": True}))
 
+    # Update the player list and ensure readiness state is tracked
     def handle_player_update(self, players):
         if self.network.username not in players:
             players.append(self.network.username)
@@ -69,7 +73,7 @@ class LobbyScreen:
         for p in players:
             if p not in self.player_ready:
                 self.player_ready[p] = False
-
+    # If all players are ready, trigger the game start sequence
     def check_all_ready(self):
         with self.network.lock:
             valid_players = [p for p in self.network.players if self.player_ready.get(p) is not None]
@@ -78,42 +82,10 @@ class LobbyScreen:
             print("All players are ready")
             self.network.send_game_command("START")
             self.handle_network_message("GAME:START")
-
-    # def run(self):
-    #     clock = pygame.time.Clock()
-
-    #     while self.network.running:
-    #         for event in pygame.event.get():
-    #             if event.type == pygame.QUIT:
-    #                 self.quit_lobby()
-    #                 return
-
-    #             if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
-    #                 message = self.input_box.text.strip()
-    #                 if message:
-    #                     self.network.send_message(message)
-    #                     self.input_box.text = ""
-
-    #             if event.type == pygame.USEREVENT and event.dict.get("start_game"):
-    #                 print("Launching GameBoard...")
-    #                 GameBoard(self.network).run()
-    #                 pygame.quit()
-    #                 sys.exit()
-
-    #             self.input_box.handle_event(event)
-    #             self.ready_button.handle_event(event)
-    #             action = self.exit_button.handle_event(event)
-    #             if action is not None:
-    #                 self.quit_lobby()
-    #                 return
-
-    #         self.draw()
-    #         pygame.display.flip()
-    #         clock.tick(60)
-
+    
+    # Run the main loop of the lobby screen until game starts or user exits
     def run(self):
         clock = pygame.time.Clock()
-
         while True:
             if not self.network.running:
                 print("[DEBUG] Disconnected from server, returning to main menu...")
@@ -127,13 +99,11 @@ class LobbyScreen:
                 if event.type == pygame.QUIT:
                     self.quit_lobby()
                     return
-
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
                     message = self.input_box.text.strip()
                     if message:
                         self.network.send_message(message)
                         self.input_box.text = ""
-
                 if event.type == pygame.USEREVENT and event.dict.get("start_game"):
                     print("Launching GameBoard...")
                     GameBoard(self.network).run()
@@ -153,8 +123,7 @@ class LobbyScreen:
             pygame.display.flip()
             clock.tick(60)
 
-
-
+    # Handle toggling ready state and notify the server
     def on_ready_toggle(self, player_id, is_ready):
         self.player_ready[player_id] = is_ready
         self.network.send_game_command(f"READY:{int(is_ready)}:{player_id}")
@@ -162,16 +131,14 @@ class LobbyScreen:
         if self.network.is_host:
             self.check_all_ready()
 
+    # Render the lobby screen UI, including players, chat messages, and buttons
     def draw(self):
         SCREEN.fill(WHITE)
-
         title_surf = MEDIUM_FONT.render("Lobby", True, BLUE)
         SCREEN.blit(title_surf, (20, 20))
-
         server_info = self.network.get_server_info()
         server_surf = SMALL_FONT.render(server_info, True, BLACK)
         SCREEN.blit(server_surf, (20, 50))
-
         players_surf = SMALL_FONT.render("Players:", True, BLACK)
         SCREEN.blit(players_surf, (WIDTH - 150, 20))
 
@@ -188,10 +155,11 @@ class LobbyScreen:
         self.exit_button.draw(SCREEN)
         self.ready_button.draw(SCREEN)
 
+    # Disconnect from network and leave lobby
     def quit_lobby(self):
         self.network.quit()
 
-
+# Render the UI to enter username and host a new server to create a game
 def create_game_screen():
     username_box = InputBox(WIDTH // 2 - 100, 150, 200, 40, "Username")
     port_box = InputBox(WIDTH // 2 - 100, 220, 200, 40, "Port", "25565")
@@ -205,14 +173,12 @@ def create_game_screen():
 
     while True:
         SCREEN.fill(WHITE)
-
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 exit_game()
 
             username_box.handle_event(event)
             port_box.handle_event(event)
-
             for button in buttons:
                 action = button.handle_event(event)
                 if action == "back":
@@ -220,16 +186,15 @@ def create_game_screen():
 
         title_surf = TITLE_FONT.render("Create Game", True, BLUE)
         SCREEN.blit(title_surf, (WIDTH // 2 - title_surf.get_width() // 2, 50))
-
         username_box.draw(SCREEN)
         port_box.draw(SCREEN)
-
         for button in buttons:
             button.draw(SCREEN)
 
         pygame.display.flip()
         clock.tick(60)
 
+# Render the UI to input server address and join an existing game
 def join_game_screen():
     error_message = ""
     username_box = InputBox(WIDTH // 2 - 100, 120, 200, 40, "Username")
@@ -256,11 +221,11 @@ def join_game_screen():
             200,
             50,
             lambda: try_join_server(username_box.text, server_ip_box.text, port_box.text)
-        )
+        ),
+        Button("Back", 20, HEIGHT - 70, 100, 40, lambda: "back")
     ]
 
     clock = pygame.time.Clock()
-
     while True:
         SCREEN.fill(WHITE)
 
@@ -279,7 +244,6 @@ def join_game_screen():
 
         title_surf = TITLE_FONT.render("Join Game", True, BLUE)
         SCREEN.blit(title_surf, (WIDTH // 2 - title_surf.get_width() // 2, 50))
-
         username_box.draw(SCREEN)
         server_ip_box.draw(SCREEN)
         port_box.draw(SCREEN)
@@ -294,6 +258,7 @@ def join_game_screen():
         pygame.display.flip()
         clock.tick(60)
 
+# Display the game's main menu with options to create, join, or exit the game
 def main_menu():
     buttons = [
         Button("Create a Game", WIDTH // 2 - 100, 160, 200, 50, create_game_screen),

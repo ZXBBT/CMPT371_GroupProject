@@ -1,7 +1,10 @@
+# Supports hosting, joining, sending and receiving messages, and broadcasting game state updates over TCP sockets
+
 import socket
 import threading
 import time
 
+# Handles networking logic for multiplayer game clients and servers
 class NetworkManager:
     def __init__(self, username, port, is_host=False, server_ip=None):
         self.username = username
@@ -26,12 +29,15 @@ class NetworkManager:
         else:
             self.connect_to_server()
     
+    # Set the callback to handle incoming GAME or MSG messages
     def set_message_handler(self, handler):
         self.message_handler = handler
     
+    # Set the callback to handle updates to the player list
     def set_player_update_handler(self, handler):
         self.player_update_handler = handler
     
+    # Start the TCP server and begin accepting connections
     def start_server(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -44,6 +50,7 @@ class NetworkManager:
             self.add_message(f"Failed to start server: {str(e)}")
             self.running = False
 
+    # Return the local IP address of the host machine
     def get_local_ip(self):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -52,6 +59,7 @@ class NetworkManager:
         except Exception:
             return "127.0.0.1"
 
+    # Accept and handle new client connections in server mode
     def accept_connections(self):
         while self.running:
             try:
@@ -63,7 +71,8 @@ class NetworkManager:
                 if self.running:
                     print(f"Error accepting connection: {e}")
                 break
-
+    
+    # Connect this client to the server and start receiving messages
     def connect_to_server(self):
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
@@ -75,6 +84,7 @@ class NetworkManager:
             self.add_message(f"Failed to connect: {str(e)}")
             self.running = False
 
+    # Handle incoming messages from a connected client for server side only
     def handle_client(self, client_socket):
         username = ""
         try:
@@ -160,6 +170,7 @@ class NetworkManager:
                 if client_socket in self.clients:
                     self.clients.remove(client_socket)
 
+    # Receive messages from the server for client side only
     def receive_messages(self):
         while self.running:
             try:
@@ -167,17 +178,14 @@ class NetworkManager:
                 if not data:
                     break
 
-                # Handle multiple GAME messages stuck together (TCP stream issue)
                 if data.startswith("GAME:"):
                     messages = data.split("GAME:")
                     for msg in messages:
                         if not msg.strip():
                             continue
-                        msg = "GAME:" + msg  # reattach prefix
+                        msg = "GAME:" + msg
                         if self.message_handler:
                             self.message_handler(msg)
-
-                # Handle single MSG or PLAYERS or shutdown message
                 elif data.startswith("MSG:"):
                     self.add_message(data.split(":", 1)[1])
                 elif data.startswith("PLAYERS:"):
@@ -194,7 +202,6 @@ class NetworkManager:
                     print(f"Error receiving messages: {e}")
                 break
 
-        # Clean up socket on exit
         if self.client_socket:
             try:
                 if self.running:
@@ -204,6 +211,7 @@ class NetworkManager:
                 pass
         self.running = False
 
+    # Send a message to all connected clients except the excluded one
     def broadcast(self, message, exclude_socket=None):
         if message.startswith("PLAYERS:"):
             with self.lock:
@@ -222,7 +230,8 @@ class NetworkManager:
                             client.send(message.encode())
                         except:
                             continue
-
+    
+    # Send a chat message to other players
     def send_message(self, message):
         if not self.running:
             return
@@ -238,6 +247,7 @@ class NetworkManager:
                 self.add_message(f"Failed to send message: {e}")
                 self.running = False
 
+    # Send a game command to the server or clients
     def send_game_command(self, command):
         if not self.running:
             return
@@ -252,6 +262,7 @@ class NetworkManager:
         except Exception as e:
             print(f"Failed to send game command: {e}")
 
+    # Append a message to the local message list and call the handler if set
     def add_message(self, message):
         if message:
             with self.lock:
@@ -259,12 +270,14 @@ class NetworkManager:
             if self.message_handler and message.startswith("MSG:"):
                 self.message_handler(message)
 
+    # Return a string describing the current network connection
     def get_server_info(self):
         if self.is_host:
             return f"Host IP: {self.host_ip}:{self.port}"
         else:
             return f"Connected to: {self.server_ip}:{self.port}"
 
+    # Disconnect the client or shut down the server
     def quit(self):
         self.running = False
         if not self.is_host and self.client_socket:
