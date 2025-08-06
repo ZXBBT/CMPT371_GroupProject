@@ -1,12 +1,15 @@
+# Contains reusable UI components for the game, including buttons and input boxes
+# These are used in menus, lobbies, and other interface screens
+
 import pygame
 
-# Color constants
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 LIGHT_GRAY = (200, 200, 200)
 DARK_GRAY = (50, 50, 50)
 BLUE = (0, 120, 215)
 
+# A clickable button with hover effect and text label
 class Button:
     def __init__(self, text, x, y, width, height, callback):
         self.text = text
@@ -15,6 +18,7 @@ class Button:
         self.font = pygame.font.SysFont("Arial", 24)
         self.hovered = False
 
+    # Render the button with its label and border on the given surface
     def draw(self, surface):
         color = LIGHT_GRAY if not self.hovered else (180, 180, 180)
         pygame.draw.rect(surface, color, self.rect, border_radius=8)
@@ -24,6 +28,7 @@ class Button:
         text_rect = text_surf.get_rect(center=self.rect.center)
         surface.blit(text_surf, text_rect)
 
+    # Detect clicks and execute the callback if the button is pressed
     def handle_event(self, event):
         self.hovered = self.rect.collidepoint(pygame.mouse.get_pos())
         
@@ -31,6 +36,7 @@ class Button:
             return self.callback()
         return None
 
+# A special toggle button for marking a player as ready or not
 class ReadyButton(Button):
     def __init__(self, text, x, y, width, height, callback_toggle, player_id):
         super().__init__(text, x, y, width, height, callback_toggle)
@@ -38,6 +44,7 @@ class ReadyButton(Button):
         self.player_id = player_id
         self.callback_toggle = callback_toggle
 
+    # Draw the button with different colors based on ready status
     def draw(self, surface):
         color = (100, 255, 100) if self.ready else LIGHT_GRAY
         if self.hovered:
@@ -51,6 +58,7 @@ class ReadyButton(Button):
         text_rect = text_surf.get_rect(center=self.rect.center)
         surface.blit(text_surf, text_rect)
 
+    # Toggle ready state on click and notify via callback
     def handle_event(self, event):
         self.hovered = self.rect.collidepoint(pygame.mouse.get_pos())
         if event.type == pygame.MOUSEBUTTONDOWN and self.hovered:
@@ -58,7 +66,7 @@ class ReadyButton(Button):
             return self.callback_toggle(self.player_id, self.ready)
         return None
 
-
+# A text input field with placeholder and basic editing capabilities
 class InputBox:
     def __init__(self, x, y, width, height, placeholder="", default_text=""):
         self.rect = pygame.Rect(x, y, width, height)
@@ -69,6 +77,7 @@ class InputBox:
         self.active = False
         self.placeholder_color = (150, 150, 150)
 
+    # Process focus, typing, and return key interaction
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
             self.active = self.rect.collidepoint(event.pos)
@@ -83,6 +92,7 @@ class InputBox:
                 self.text += event.unicode
         return False
 
+    # Draw the input box and its current or placeholder text
     def draw(self, surface):
         pygame.draw.rect(surface, WHITE, self.rect)
         pygame.draw.rect(surface, self.color, self.rect, 2)

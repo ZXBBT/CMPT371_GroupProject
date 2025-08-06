@@ -85,7 +85,9 @@ void NetworkManager::clientLoop(const string& ip, int port) {
     }
 
     cout << "Connected to server at " << ip << ":" << port << "\n";
-    receiveLoop(clientSocket);
+    while (running) {
+        receiveLoop(clientSocket);
+    }
 }
 
 void NetworkManager::receiveLoop(int sockfd) {
@@ -94,6 +96,7 @@ void NetworkManager::receiveLoop(int sockfd) {
         memset(buffer, 0, sizeof(buffer));
         ssize_t bytes = recv(sockfd, buffer, sizeof(buffer) - 1, 0);
         if (bytes <= 0) {
+            if (!running) break;
             break;
         }
         string msg(buffer);
@@ -130,13 +133,18 @@ bool NetworkManager::pollMessage(string& message) {
 
 void NetworkManager::shutdown() {
     running = false;
-    if (serverSocket != -1) 
-        close(serverSocket);
-    if (clientSocket != -1) 
-        close(clientSocket);
-    for (vector<int>::iterator it = clientSockets.begin(); it != clientSockets.end(); ++it) {
-        close(*it);
+
+    if (clientSocket >= 0) {
+        ::shutdown(clientSocket, SHUT_RDWR);
+        ::close(clientSocket);
+        clientSocket = -1;
     }
-    if (listenerThread.joinable()) 
+    if (serverSocket >= 0) {
+        ::shutdown(serverSocket, SHUT_RDWR);
+        ::close(serverSocket);
+        serverSocket = -1;
+    }
+    if (listenerThread.joinable()) {
         listenerThread.join();
+    }
 }
