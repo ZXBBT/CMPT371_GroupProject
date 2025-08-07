@@ -52,6 +52,7 @@ class NetworkManager:
 
         # If client role, announce join
         if not is_host:
+            print(f"Joining game as {self.username}")
             self._send_raw(f"JOIN:{self.username}")
 
         # Start polling thread to process incoming messages
@@ -91,6 +92,7 @@ class NetworkManager:
             try:
                 if _lib.poll_network_message(self._handle, buf, bufsize):
                     raw = buf.value.decode()
+                    print(f"Received raw: {raw}")
                     self._process_raw(raw)
             except Exception as e:
                 print(f"Network poll error: {e}")
@@ -109,14 +111,17 @@ class NetworkManager:
         # Handle join/leave events
         if raw.startswith("JOIN:") or raw.startswith("LEAVE:"):
             action, name = raw.split(":", 1)
+            print(f"Player {action}: {name}")
             with self.lock:
+                print(self.players)
                 if action == "JOIN" and name not in self.players:
                     self.players.append(name)
+                    self._send_raw(f"PLAYERS:{','.join(self.players)}")
+                    self._invoke_message(f"{name} joined the lobby")
                 elif action == "LEAVE" and name in self.players:
                     self.players.remove(name)
-            # Broadcast updated player list
-            self._send_raw(f"PLAYERS:{','.join(self.players)}")
-            self._invoke_message(raw)
+                    self._send_raw(f"PLAYERS:{','.join(self.players)}")
+                    self._invoke_message(f"{name} left the lobby")
             return
 
         # Handle chat messages

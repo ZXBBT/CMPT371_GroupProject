@@ -8,14 +8,19 @@
 #include <unistd.h>
 #include <queue>
 #include <mutex>
+#include <fstream>
+
+std::ofstream logFile;
 
 NetworkManager::NetworkManager(Role role) {
     this->role = role;
     serverSocket = -1;
     clientSocket = -1;
     running = false;
+    // logFile.open("network_log.txt", std::ios::app); // Append mode
 }
 NetworkManager::~NetworkManager() {
+    // if (logFile.is_open()) logFile.close();
     shutdown();
 }
 
@@ -100,7 +105,16 @@ void NetworkManager::receiveLoop(int sockfd) {
             break;
         }
         string msg(buffer);
-        // cout << "Received: " << msg << "\n";
+        if (role == Role::HOST) {
+            cout << "host Received: " << msg << "\n";
+        }
+        else {
+            cout << "client Received: " << msg << "\n";
+        }
+        // if (logFile.is_open()) {
+        //     logFile << "[RECV] " << msg << std::endl;
+        // }
+
         lock_guard<mutex> lock(queueMutex);
         messageQueue.push(msg);
     }
@@ -108,6 +122,15 @@ void NetworkManager::receiveLoop(int sockfd) {
 }
 
 void NetworkManager::sendMessage(const std::string& message) {
+    // if (logFile.is_open()) {
+    //     logFile << "[SEND] " << message << std::endl;
+    // }
+    if (role == Role::HOST) {
+        cout << "host Sending: " << message << "\n";
+    }
+    else {
+        cout << "client Sending: " << message << "\n";
+    }
     if (role == Role::HOST)
         broadcast(message);
     else
