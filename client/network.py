@@ -21,7 +21,7 @@ class NetworkManager:
         self.lock = threading.Lock()
         self.message_handler = None
         self.player_update_handler = None
-        
+        # If host, start server and initialize board state
         if is_host:
             self.host_ip = self.get_local_ip()
             self.start_server()
@@ -92,7 +92,7 @@ class NetworkManager:
                 data = client_socket.recv(1024).decode()
                 if not data:
                     break
-                    
+                # Handle player joining
                 if data.startswith("JOIN:"):
                     username = data.split(":")[1]
                     with self.lock:
@@ -100,20 +100,25 @@ class NetworkManager:
                             self.players.append(username)
                     self.broadcast(f"PLAYERS:{','.join(self.players)}")
                     self.add_message(f"{username} joined the lobby")
+                # Handle chat messages
                 elif data.startswith("MSG:"):
                     message = data.split(":", 1)[1]
                     self.broadcast(f"MSG:{message}", exclude_socket=client_socket)
+                # Handle game-related messages
                 elif data.startswith("GAME:"):
+                    # Handle block locking
                     if data.startswith("GAME:LOCK:"):
                         if self.is_host:
                             self.broadcast(data)
                         if self.message_handler:
                             self.message_handler(data)
+                    # Handle block unlocking
                     elif data.startswith("GAME:UNLOCK:"):
                         if self.is_host:
                             self.broadcast(data)
                         if self.message_handler:
                             self.message_handler(data)
+                     # Handle block claiming (filling)
                     if data.startswith("GAME:CLAIM:") and self.is_host:
                         try:
                             _, claim_data = data.split("GAME:CLAIM:")
@@ -131,9 +136,11 @@ class NetworkManager:
                         except Exception as e:
                             print(f"Malformed CLAIM: {data} ({e})")
                     else:
+                        # General game message handling
                         if self.message_handler:
                             self.message_handler(data)
                         self.broadcast(data)
+                # Handle player leaving
                 elif data.startswith("LEAVE:"):
                     username = data.split(":")[1]
                     with self.lock:
@@ -156,6 +163,7 @@ class NetworkManager:
         except Exception as e:
             print(f"Error handling client: {e}")
         finally:
+            # Cleanup on disconnect
             if username:
                 with self.lock:
                     if username in self.players:
@@ -177,7 +185,7 @@ class NetworkManager:
                 data = self.client_socket.recv(1024).decode()
                 if not data:
                     break
-
+                # Handle multiple GAME messages in one TCP packet
                 if data.startswith("GAME:"):
                     messages = data.split("GAME:")
                     for msg in messages:
@@ -186,13 +194,16 @@ class NetworkManager:
                         msg = "GAME:" + msg
                         if self.message_handler:
                             self.message_handler(msg)
+                # Handle chat messages
                 elif data.startswith("MSG:"):
                     self.add_message(data.split(":", 1)[1])
+                # Handle player list updates
                 elif data.startswith("PLAYERS:"):
                     with self.lock:
                         self.players = data.split(":")[1].split(",")
                     if self.player_update_handler:
                         self.player_update_handler(self.players)
+                # Handle server shutdown
                 elif data == "SERVER_SHUTDOWN":
                     self.add_message("Server has been shut down")
                     break
@@ -202,6 +213,7 @@ class NetworkManager:
                     print(f"Error receiving messages: {e}")
                 break
 
+        # Cleanup on disconnect
         if self.client_socket:
             try:
                 if self.running:
