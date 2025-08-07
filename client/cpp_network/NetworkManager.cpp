@@ -17,10 +17,10 @@ NetworkManager::NetworkManager(Role role) {
     serverSocket = -1;
     clientSocket = -1;
     running = false;
-    // logFile.open("network_log.txt", std::ios::app); // Append mode
+    logFile.open("network_log.txt", std::ios::app); // Append mode
 }
 NetworkManager::~NetworkManager() {
-    // if (logFile.is_open()) logFile.close();
+    if (logFile.is_open()) logFile.close();
     shutdown();
 }
 
@@ -111,9 +111,9 @@ void NetworkManager::receiveLoop(int sockfd) {
         else {
             cout << "client Received: " << msg << "\n";
         }
-        // if (logFile.is_open()) {
-        //     logFile << "[RECV] " << msg << std::endl;
-        // }
+        if (logFile.is_open()) {
+            logFile << "[RECV] " << msg << std::endl;
+        }
 
         lock_guard<mutex> lock(queueMutex);
         messageQueue.push(msg);
@@ -122,9 +122,9 @@ void NetworkManager::receiveLoop(int sockfd) {
 }
 
 void NetworkManager::sendMessage(const std::string& message) {
-    // if (logFile.is_open()) {
-    //     logFile << "[SEND] " << message << std::endl;
-    // }
+    if (logFile.is_open()) {
+        logFile << "[SEND] " << message << std::endl;
+    }
     if (role == Role::HOST) {
         cout << "host Sending: " << message << "\n";
     }
