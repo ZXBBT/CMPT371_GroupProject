@@ -163,9 +163,32 @@ class LobbyScreen:
 def create_game_screen():
     username_box = InputBox(WIDTH // 2 - 100, 150, 200, 40, "Username")
     port_box = InputBox(WIDTH // 2 - 100, 220, 200, 40, "Port", "25565")
+    error_message = ""
+
+    def try_create_server():
+        nonlocal error_message
+        username = username_box.text.strip()
+        port_text = port_box.text.strip()
+
+        if not username:
+            error_message = "Username cannot be empty"
+            return
+        try:
+            port = int(port_text)
+        except ValueError:
+            error_message = "Port must be a number"
+            return
+
+        try:
+            network = NetworkManager(username, port, is_host=True)
+            if not network.running:
+                raise Exception("Failed to start server")
+            LobbyScreen(network).run()
+        except Exception:
+            error_message = "Failed to create server"
+
     buttons = [
-        Button("Create Server", WIDTH // 2 - 100, 300, 200, 50,
-               lambda: LobbyScreen(NetworkManager(username_box.text, int(port_box.text), is_host=True)).run()),
+        Button("Create Server", WIDTH // 2 - 100, 300, 200, 50, try_create_server),
         Button("Back", 20, HEIGHT - 70, 100, 40, lambda: "back")
     ]
 
@@ -173,6 +196,7 @@ def create_game_screen():
 
     while True:
         SCREEN.fill(WHITE)
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 exit_game()
@@ -191,8 +215,13 @@ def create_game_screen():
         for button in buttons:
             button.draw(SCREEN)
 
+        if error_message:
+            error_surf = SMALL_FONT.render(error_message, True, (255, 0, 0))
+            SCREEN.blit(error_surf, (WIDTH // 2 - error_surf.get_width() // 2, 10))
+
         pygame.display.flip()
         clock.tick(60)
+
 
 # Render the UI to input server address and join an existing game
 def join_game_screen():
@@ -204,6 +233,10 @@ def join_game_screen():
     def try_join_server(username, server_ip, port_text):
         nonlocal error_message
         error_message = ""
+        username = username.strip()
+        if not username:
+            error_message = "Username cannot be empty"
+            return
         try:
             port = int(port_text)
             network = NetworkManager(username, port, server_ip=server_ip)
