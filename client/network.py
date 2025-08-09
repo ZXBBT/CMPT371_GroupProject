@@ -21,6 +21,7 @@ class NetworkManager:
         self.lock = threading.Lock()
         self.message_handler = None
         self.player_update_handler = None
+        self.duplicate_username = False
         # If host, start server and initialize board state
         if is_host:
             self.host_ip = self.get_local_ip()
@@ -96,7 +97,13 @@ class NetworkManager:
                 if data.startswith("JOIN:"):
                     username = data.split(":")[1]
                     with self.lock:
-                        if username not in self.players:
+                        if username in self.players:
+                            self.duplicate_username = True
+                            self.messages.append(f"Duplicate username attempted: {username}")
+                            self.messages.append("Closing socket due to duplicate username...")
+                            client_socket.send("ERROR:Username already taken".encode())
+                            break
+                        else:
                             self.players.append(username)
                     self.broadcast(f"PLAYERS:{','.join(self.players)}")
                     self.add_message(f"{username} joined the lobby")
@@ -164,12 +171,13 @@ class NetworkManager:
             print(f"Error handling client: {e}")
         finally:
             # Cleanup on disconnect
-            if username:
+            if username and not self.duplicate_username:
                 with self.lock:
                     if username in self.players:
                         self.players.remove(username)
                         self.broadcast(f"PLAYERS:{','.join(self.players)}")
                         self.add_message(f"{username} left the lobby")
+            self.duplicate_username = False
             try:
                 client_socket.close()
             except:
@@ -186,7 +194,17 @@ class NetworkManager:
                 if not data:
                     break
                 # Handle multiple GAME messages in one TCP packet
-                if data.startswith("GAME:"):
+                if data.startswith("ERROR:"):
+                    self.add_message("Error from server: " + data[6:])
+                    self.add_message("Disconnecting in 3 seconds...")
+                    time.sleep(1)
+                    self.add_message("Disconnecting in 2 seconds...")
+                    time.sleep(1)
+                    self.add_message("Disconnecting in 1 seconds...")
+                    time.sleep(1)
+                    self.running = False
+                    break
+                elif data.startswith("GAME:"):
                     messages = data.split("GAME:")
                     for msg in messages:
                         if not msg.strip():
